@@ -34,7 +34,7 @@ default_news = (
 news_input = st.sidebar.text_area("市場即時新聞", value=default_news, height=150)
 
 
-BACKEND_URL = "https://ai-finance-assistant-v5zz37sr8-ai-agent99.vercel.app/api/v1/trade-assistant-v2"
+BACKEND_URL = "https://ai-finance-assistant-v5zz37sr8-ai-agent99.vercel.app/v1/trade-assistant-v2"
 
 if st.sidebar.button("🚀 開始即時量化分析", type="primary"):
     news_list = [line.strip() for line in news_input.split("\n") if line.strip()]
