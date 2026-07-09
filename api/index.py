@@ -15,7 +15,7 @@ from api.services import LLMReportService, SentimentService, UpstreamServiceErro
 settings = get_settings()
 logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 LOGGER = logging.getLogger(__name__)
-app = FastAPI(title="AI Market Trade Assistant", version="1.0.0", docs_url="/api/docs")
+app = FastAPI(title="AI Market Trade Assistant", version="1.0.0", openapi_url="/api/openapi.json", docs_url="/api/docs")
 
 
 class TechnicalIndicators(BaseModel):
