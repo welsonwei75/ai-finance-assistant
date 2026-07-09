@@ -5,7 +5,7 @@
 ## 啟動
 
 1. 安裝 `requirements.txt`，複製 `.env.example` 為 `.env` 並填入金鑰。
-2. 執行 `python scripts/train_model.py` 產生模型 JSON。
+2. 如需重新訓練，先安裝 `requirements-training.txt`，再執行 `python scripts/train_model.py`。Vercel 推理端使用純 Python 讀取模型 JSON，不安裝 XGBoost 或 NumPy。
 3. 執行 `uvicorn api.index:app --reload`。
 4. 前端另行安裝 `requirements-frontend.txt`、設定 `BACKEND_API_URL`，再執行 `streamlit run app.py`。
 

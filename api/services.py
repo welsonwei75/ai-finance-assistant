@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any, Final, Mapping, Sequence
 
@@ -75,7 +76,7 @@ class SentimentService:
 
 
 class XGBoostPredictor:
-    """Load a compact XGBoost JSON booster and emit normalized trading signals."""
+    """Evaluate an XGBoost JSON tree ensemble without native runtime packages."""
 
     FEATURE_ORDER: Final[tuple[str, ...]] = (
         "rsi", "macd", "macd_signal", "volatility", "volume_change", "sentiment_score"
@@ -83,33 +84,66 @@ class XGBoostPredictor:
 
     def __init__(self, model_path: Path) -> None:
         self._model_path = model_path
-        self._booster: Any | None = None
+        self._model: dict[str, Any] | None = None
 
-    def _load(self) -> Any:
-        """Lazily import native dependencies to reduce initialization cost."""
+    def _load(self) -> dict[str, Any]:
+        """Load and validate the small JSON artifact once per warm process."""
 
-        if self._booster is None:
+        if self._model is None:
             if not self._model_path.is_file():
                 raise RuntimeError(f"XGBoost model not found: {self._model_path}")
-            import xgboost as xgb
+            try:
+                with self._model_path.open(encoding="utf-8") as model_file:
+                    model = json.load(model_file)
+                booster = model["learner"]["gradient_booster"]
+                if booster["name"] != "gbtree":
+                    raise ValueError("Only gbtree boosters are supported")
+                if model["learner"]["objective"]["name"] != "binary:logistic":
+                    raise ValueError("Only binary:logistic objectives are supported")
+                self._model = model
+            except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+                raise RuntimeError("Invalid XGBoost JSON model artifact") from exc
+        return self._model
 
-            booster = xgb.Booster()
-            booster.load_model(self._model_path)
-            self._booster = booster
-        return self._booster
+    @staticmethod
+    def _tree_value(tree: Mapping[str, Any], values: Sequence[float]) -> float:
+        """Traverse one XGBoost array-form tree and return its leaf weight."""
+
+        node = 0
+        while int(tree["left_children"][node]) != -1:
+            feature_index = int(tree["split_indices"][node])
+            value = values[feature_index]
+            if math.isnan(value):
+                go_left = bool(tree["default_left"][node])
+            else:
+                go_left = value < float(tree["split_conditions"][node])
+            branch = "left_children" if go_left else "right_children"
+            node = int(tree[branch][node])
+        return float(tree["base_weights"][node])
 
     def predict(self, features: Mapping[str, float], sentiment_score: float) -> dict[str, Any]:
         """Predict upside probability and map it to an actionable standard signal."""
-
-        import numpy as np
-        import xgboost as xgb
 
         merged = {**features, "sentiment_score": sentiment_score}
         missing = [name for name in self.FEATURE_ORDER if name not in merged]
         if missing:
             raise ValueError(f"Missing model features: {', '.join(missing)}")
-        matrix = np.asarray([[float(merged[name]) for name in self.FEATURE_ORDER]], dtype=np.float32)
-        probability = float(self._load().predict(xgb.DMatrix(matrix, feature_names=list(self.FEATURE_ORDER)))[0])
+        values = [float(merged[name]) for name in self.FEATURE_ORDER]
+        model = self._load()["learner"]
+        saved_names = model.get("feature_names") or list(self.FEATURE_ORDER)
+        if list(saved_names) != list(self.FEATURE_ORDER):
+            raise RuntimeError("Model feature order does not match the API contract")
+        raw_base_score = model["learner_model_param"]["base_score"]
+        if isinstance(raw_base_score, list):
+            raw_base_score = raw_base_score[0]
+        if isinstance(raw_base_score, str) and raw_base_score.startswith("["):
+            raw_base_score = raw_base_score.strip("[]").split(",", maxsplit=1)[0]
+        base_score = float(raw_base_score)
+        base_score = min(max(base_score, 1e-7), 1.0 - 1e-7)
+        margin = math.log(base_score / (1.0 - base_score))
+        trees = model["gradient_booster"]["model"]["trees"]
+        margin += sum(self._tree_value(tree, values) for tree in trees)
+        probability = 1.0 / (1.0 + math.exp(-max(min(margin, 709.0), -709.0)))
         probability = max(0.0, min(1.0, probability))
         signal = "🟢 STRONG BUY" if probability >= 0.65 else "🔴 SHORT" if probability <= 0.35 else "🟡 HOLD"
         return {"signal": signal, "up_probability": round(probability, 6)}

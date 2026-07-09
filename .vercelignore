@@ -1,0 +1,12 @@
+# Only the FastAPI backend is deployed to Vercel.
+app.py
+requirements-frontend.txt
+requirements-training.txt
+scripts/
+.env*
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.git/
+README.md

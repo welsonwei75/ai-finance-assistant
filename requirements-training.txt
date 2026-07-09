@@ -1,0 +1,3 @@
+# Offline only; do not install these packages in the Vercel runtime.
+xgboost==3.0.2
+numpy==2.2.6
