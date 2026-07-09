@@ -33,18 +33,27 @@ async def trade_assistant_endpoint(payload: TradePayload):
         up_probability = min(max((avg_pos - avg_neg + 0.5) * 100, 10.0), 95.0)
         market_sentiment_text = "偏向樂觀" if avg_pos > avg_neg else "偏向悲觀"
         
-        report_markdown = await generate_report(
-            market_trend_pred=f"{up_probability:.2f}% 機率上漲",
-            sentiment_summary=market_sentiment_text,
-            raw_news_list=payload.news_list,
-            risk_level=payload.risk_level,
-            api_key=llm_key
-        )
+        # ==================== 尋找這段並進行替換 ====================
+        # 3. 呼叫大模型（加入防爆安全降級）
+        try:
+            report_markdown = await generate_report(
+                market_trend_pred=f"{up_probability:.2f}% 機率上漲",
+                sentiment_summary=market_sentiment_text,
+                raw_news_list=payload.news_list,
+                risk_level=payload.risk_level,
+                api_key=llm_key
+            )
+        except Exception as llm_error:
+            # 【核心修改】如果 DeepSeek 沒錢或掛掉，不卡死整支 API，而是給予罐頭報告
+            report_markdown = f"### 📝 每日交易助理報告 (系統提示：大模型服務暫不可用)\n\n**當前量化訊號：** {market_sentiment_text}\n\n*提示：目前 LLM 報告生成管道餘額不足，但上方的 FinBERT 情緒指標與上漲機率預測（{up_probability:.2f}%）皆為即時運算之真實數據，前端可正常抓取顯示。*"
+
         return {
             "status": "success",
-            "metrics": {"up_probability": f"{up_probability:.2f}%", "signal": "HOLD"},
+            "metrics": {
+                "up_probability": f"{up_probability:.2f}%",
+                "signal": "STRONG BUY" if up_probability > 70 else ("HOLD" if up_probability > 40 else "SHORT")
+            },
             "sentiment_analysis": analysis_res,
             "report": report_markdown
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # ============================================================
