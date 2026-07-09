@@ -1,15 +1,15 @@
-﻿import os
+import os
 import httpx
 import logging
 import asyncio
 
 logger = logging.getLogger(__name__)
 
-# 限制連線池，徹底防範 Errno 16 忙碌錯誤
+# 嚴格限制連線池，彻底消滅 FinBERT [Errno 16] Device busy 錯誤
 limits = httpx.Limits(max_keepalive_connections=1, max_connections=1)
 
 async def analyze_sentiment(news_list: list, hf_token: str) -> list:
-    """呼叫 Hugging Face FinBERT API"""
+    """呼叫 Hugging Face FinBERT API 進行情緒分析 (安全降級版)"""
     HF_URL = "https://api-inference.huggingface.co/models/ProsusAI/finbert"
     headers = {"Authorization": f"Bearer {hf_token}"}
     results = []
@@ -35,35 +35,38 @@ async def analyze_sentiment(news_list: list, hf_token: str) -> list:
 
 async def generate_report(market_trend_pred: str, sentiment_summary: str, raw_news_list: list, risk_level: float, api_key: str) -> str:
     """
-    使用雙重模型相容機制（Flash-latest / Pro）繞過 Google 刁鑽的 404 路由限制
+    採用全球標準通用大模型 REST 端點，徹底根除 Google 的 404 路由詛咒
     """
+    # 這裡我們使用相容性最高、最穩定的開放標準 API 網址 (你也可以換成 SiliconFlow、DeepSeek 或 OpenAI 官方端點)
+    url = "https://api.deepseek.com/v1/chat/completions"
+    
     retrieved_context = "\n".join([f"- {news}" for news in raw_news_list[:3]])
     prompt_content = f"市場上漲機率: {market_trend_pred}\n情緒: {sentiment_summary}\n新聞: {retrieved_context}\n請用繁體中文生成一份包含市場概述、基於風險度 {risk_level} 的交易建議與風險提示的簡短報告。"
     
     payload = {
-        "contents": [{"parts": [{"text": prompt_content}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1000}
+        "model": "deepseek-chat", # 或是你所使用的通用模型名稱
+        "messages": [
+            {"role": "system", "content": "你是一位專業的 AI 交易員助理，請一律使用繁體中文回覆。"},
+            {"role": "user", "content": prompt_content}
+        ],
+        "temperature": 0.3,
+        "max_tokens": 1000
     }
-    headers = {"Content-Type": "application/json"}
     
-    # 備案模型清單：先嘗試最新的別名網址，失敗再切換到全域開放的舊版 Pro 端點
-    models_to_try = ["gemini-1.5-pro", "gemini-1.5-flash"]
+    # 這裡會自動帶入我們在 Vercel 後台設定的最新 LLM_API_KEY
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
     
-    async with httpx.AsyncClient(limits=limits, timeout=30.0) as client:
-        for model in models_to_try:
-            # 這是 Google 標準的 v1beta 呼叫網址結構
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-            try:
-                logger.info(f"Attempting to generate report using model: {model}")
-                response = await client.post(url, headers=headers, json=payload)
-                
-                if response.status_code == 200:
-                    res_json = response.json()
-                    return res_json['candidates'][0]['content']['parts'][0]['text']
-                else:
-                    logger.warning(f"Model {model} failed with status {response.status_code}: {response.text}")
-            except Exception as e:
-                logger.error(f"Exception raised for model {model}: {str(e)}")
-                
-        # 如果所有模型都宣告失敗
-        raise RuntimeError("All Gemini endpoints (1.5-flash-latest, gemini-pro) returned 404/Error.")
+    try:
+        async with httpx.AsyncClient(limits=limits, timeout=40.0) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            res_json = response.json()
+            return res_json['choices'][0]['message']['content']
+    except Exception as e:
+        if 'response' in locals() and response is not None:
+            logger.error(f"LLM API Error Detail: {response.text}")
+        logger.error(f"LLM API core error: {str(e)}")
+        raise RuntimeError("Report provider is temporarily unavailable")
