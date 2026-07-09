@@ -11,10 +11,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# 【核心修正】嚴格對齊前端 Streamlit 傳過來的欄位名稱！
+# 1. 前端傳過來的是技術指標結構，定義好 Pydantic 結構
+class IndicatorsPayload(BaseModel):
+    rsi: float = 50.0
+    macd: float = 0.0
+    macd_signal: float = 0.0
+    volatility: float = 0.15
+    volume_change: float = 0.0
+
 class TradePayload(BaseModel):
-    news_list: List[str]
-    risk_level: float = 0.5
+    news: List[str]
+    indicators: IndicatorsPayload
 
 @app.get("/")
 async def root():
@@ -32,34 +39,33 @@ async def trade_assistant_endpoint(payload: TradePayload):
     if not hf_token:
         raise HTTPException(status_code=500, detail="Server configuration error: Missing HF_TOKEN")
         
-    if not payload.news_list:
+    if not payload.news:
         raise HTTPException(status_code=400, detail="News list cannot be empty")
         
     try:
         # 1. 執行 FinBERT 情緒分析
-        analysis_res = await analyze_sentiment(payload.news_list, hf_token)
+        analysis_res = await analyze_sentiment(payload.news, hf_token)
         
         # 2. 模擬量化特徵與上漲機率運算
         total_pos = sum([item['scores'].get('positive', 0) for item in analysis_res])
         total_neg = sum([item['scores'].get('negative', 0) for item in analysis_res])
-        avg_pos = total_pos / len(payload.news_list) if payload.news_list else 0
-        avg_neg = total_neg / len(payload.news_list) if payload.news_list else 0
+        avg_pos = total_pos / len(payload.news) if payload.news else 0
+        avg_neg = total_neg / len(payload.news) if payload.news else 0
         
         up_probability = min(max((avg_pos - avg_neg + 0.5) * 100, 10.0), 95.0)
         market_sentiment_text = "偏向樂觀" if avg_pos > avg_neg else "偏向悲觀"
         
-        # 3. 呼叫大模型（加入防爆安全降級：即使 DeepSeek 沒餘額，也絕不讓 API 報 500 崩潰）
-        # 3. 呼叫大模型（加入防爆安全降級：即使 DeepSeek 沒錢，也絕對不卡死整支 API）
+        # 3. 呼叫大模型（已修正屬性錯誤，真正實現免錢防爆安全降級）
         try:
             report_markdown = await generate_report(
                 market_trend_pred=f"{up_probability:.2f}% 機率上漲",
                 sentiment_summary=market_sentiment_text,
                 raw_news_list=payload.news,
-                risk_level=payload.indicators.rsi, # 隨意帶入一個指標數值
+                risk_level=payload.indicators.rsi, 
                 api_key=llm_key
             )
         except Exception as llm_error:
-            # 這裡就是關鍵！沒錢時不拋出 500，而是回傳一段說明文字，讓程式繼續往下走
+            # 即使 DeepSeek 報 402 沒錢，也會被這裡牢牢接住，回傳罐頭文字，不卡死 API
             report_markdown = f"### 📝 每日交易助理報告 (系統提示：大模型服務暫不可用)\n\n**當前量化訊號：** {market_sentiment_text}\n\n*提示：目前 LLM 報告生成管道餘額不足，但上方的 FinBERT 情緒指標與上漲機率預測（{up_probability:.2f}%）皆為即時運算之真實數據，前端可正常抓取顯示。*"
 
         # 4. 成功回傳 200 OK
@@ -73,4 +79,5 @@ async def trade_assistant_endpoint(payload: TradePayload):
             "report": report_markdown
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # 捕捉真正的非預期系統錯誤
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
