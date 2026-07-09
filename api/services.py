@@ -2,14 +2,16 @@
 import httpx
 import logging
 import asyncio
+from google import genai
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
-# 嚴格限制連線池，防止 Errno 16 網路 busy
+# 限制最大並發連線數，防止 FinBERT 報出 Device or resource busy 錯誤
 limits = httpx.Limits(max_keepalive_connections=1, max_connections=1)
 
 async def analyze_sentiment(news_list: list, hf_token: str) -> list:
-    """呼叫 Hugging Face FinBERT API (安全版)"""
+    """呼叫 Hugging Face FinBERT API 進行情緒分析"""
     HF_URL = "https://api-inference.huggingface.co/models/ProsusAI/finbert"
     headers = {"Authorization": f"Bearer {hf_token}"}
     results = []
@@ -34,27 +36,24 @@ async def analyze_sentiment(news_list: list, hf_token: str) -> list:
     return results
 
 async def generate_report(market_trend_pred: str, sentiment_summary: str, raw_news_list: list, risk_level: float, api_key: str) -> str:
-    """透過 Google Gemini 1.5 Flash 官方標準 v1beta 網址生成繁體中文報告"""
-    # 修正重點：嚴格遵循官方 v1beta/models/gemini-1.5-flash 路由規格
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-    
+    """透過 Google 官方 SDK 呼叫 Gemini 1.5 Flash，免去手拼 URL 出錯的風險"""
     retrieved_context = "\n".join([f"- {news}" for news in raw_news_list[:3]])
     prompt_content = f"市場上漲機率: {market_trend_pred}\n情緒: {sentiment_summary}\n新聞: {retrieved_context}\n請用繁體中文生成一份包含市場概述、基於風險度 {risk_level} 的交易建議與風險提示的簡短報告。"
     
-    payload = {
-        "contents": [{"parts": [{"text": prompt_content}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1000}
-    }
-    headers = {"Content-Type": "application/json"}
-    
     try:
-        async with httpx.AsyncClient(limits=limits, timeout=30.0) as client:
-            response = await client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
-            res_json = response.json()
-            return res_json['candidates'][0]['content']['parts'][0]['text']
+        # 使用官方 SDK 初始化客戶端
+        client = genai.Client(api_key=api_key)
+        
+        # 官方原生非阻塞調用方式，自動校正底層所有 v1/v1beta 路由
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=prompt_content,
+            config=types.GenerateContentConfig(
+                temperature=0.3,
+                max_output_tokens=1000
+            )
+        )
+        return response.text
     except Exception as e:
-        if 'response' in locals() and response is not None:
-            logger.error(f"Gemini API Error Detail: {response.text}")
-        logger.error(f"Gemini API core error: {str(e)}")
+        logger.error(f"Google Gemini SDK core error: {str(e)}")
         raise RuntimeError("Report provider is temporarily unavailable")
