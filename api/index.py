@@ -15,8 +15,15 @@ from api.services import LLMReportService, SentimentService, UpstreamServiceErro
 settings = get_settings()
 logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 LOGGER = logging.getLogger(__name__)
-app = FastAPI(title="AI Market Trade Assistant", version="1.0.0", openapi_url="/api/openapi.json", docs_url="/api/docs")
+app = FastAPI(title="AI Market Trade Assistant", version="1.0.0")
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "Welcome to AI Finance API"}
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "version": "1.0.0"}
 
 class TechnicalIndicators(BaseModel):
     """Validated, bounded technical features expected by the trained model."""
