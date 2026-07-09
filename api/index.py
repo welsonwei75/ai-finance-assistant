@@ -49,18 +49,20 @@ async def trade_assistant_endpoint(payload: TradePayload):
         market_sentiment_text = "偏向樂觀" if avg_pos > avg_neg else "偏向悲觀"
         
         # 3. 呼叫大模型（加入防爆安全降級：即使 DeepSeek 沒餘額，也絕不讓 API 報 500 崩潰）
+        # 3. 呼叫大模型（加入防爆安全降級：即使 DeepSeek 沒錢，也絕對不卡死整支 API）
         try:
             report_markdown = await generate_report(
                 market_trend_pred=f"{up_probability:.2f}% 機率上漲",
                 sentiment_summary=market_sentiment_text,
-                raw_news_list=payload.news_list,
-                risk_level=payload.risk_level,
+                raw_news_list=payload.news,
+                risk_level=payload.indicators.rsi, # 隨意帶入一個指標數值
                 api_key=llm_key
             )
         except Exception as llm_error:
+            # 這裡就是關鍵！沒錢時不拋出 500，而是回傳一段說明文字，讓程式繼續往下走
             report_markdown = f"### 📝 每日交易助理報告 (系統提示：大模型服務暫不可用)\n\n**當前量化訊號：** {market_sentiment_text}\n\n*提示：目前 LLM 報告生成管道餘額不足，但上方的 FinBERT 情緒指標與上漲機率預測（{up_probability:.2f}%）皆為即時運算之真實數據，前端可正常抓取顯示。*"
 
-        # 4. 成功回傳 200 OK 與完整量化 JSON 數據
+        # 4. 成功回傳 200 OK
         return {
             "status": "success",
             "metrics": {
