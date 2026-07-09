@@ -47,7 +47,7 @@ async def generate_report(market_trend_pred: str, sentiment_summary: str, raw_ne
     headers = {"Content-Type": "application/json"}
     
     # 備案模型清單：先嘗試最新的別名網址，失敗再切換到全域開放的舊版 Pro 端點
-    models_to_try = ["gemini-1.5-flash-latest", "gemini-pro"]
+    models_to_try = ["gemini-1.5-pro", "gemini-1.5-flash"]
     
     async with httpx.AsyncClient(limits=limits, timeout=30.0) as client:
         for model in models_to_try:
