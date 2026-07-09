@@ -6,12 +6,12 @@ from typing import List
 # 確保從正確的服務層導入
 from api.services import analyze_sentiment, generate_report
 
-# 【核心關鍵】Vercel 規定必須在最頂層定義這個變數，名稱必須叫 app
 app = FastAPI(
     title="AI Market Trade Assistant", 
     version="1.0.0"
 )
 
+# 【核心修正】嚴格對齊前端 Streamlit 傳過來的欄位名稱！
 class TradePayload(BaseModel):
     news_list: List[str]
     risk_level: float = 0.5
