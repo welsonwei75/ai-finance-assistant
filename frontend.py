@@ -1,23 +1,21 @@
 import streamlit as st
+import httpx
 import pandas as pd
 import plotly.express as px
-import random
 
-# 1. 網頁基本配置
 st.set_page_config(
-    page_title="AI 智慧量化金融交易終端",
+    page_title="AI 智慧金融交易助理",
     page_icon="📈",
     layout="wide"
 )
 
-st.title("📈 AI 智慧量化金融交易終端 & 情緒儀表板")
-st.markdown("本系統整合 **FinBERT 財經情緒核心** 與 **量化技術指標特徵**，即時預測市場走勢。")
+st.title("📈 AI 智慧金融交易助理 & 量化情緒儀表板")
+st.markdown("本系統整合 **FinBERT 財經情緒模型** 與 **LLM 大模型**，即時分析市場新聞並預測明日走勢。")
+st.sidebar.header("⚙️ 交易策略設定")
 
 # ==========================================
-# 左側控制面板：量化技術指標欄位
+# 左側控制面板：技術指標滑桿 (完美對齊後端規格)
 # ==========================================
-st.sidebar.header("⚙️ 量化特徵與交易設定")
-
 st.sidebar.markdown("### 📊 技術指標 (Technical Indicators)")
 rsi_val = st.sidebar.slider("RSI (相對強弱指標)", 0.0, 100.0, 50.0, step=1.0)
 macd_val = st.sidebar.slider("MACD 柱狀值", -10.0, 10.0, 0.0, step=0.1)
@@ -34,103 +32,88 @@ default_news = (
 )
 news_input = st.sidebar.text_area("市場即時新聞", value=default_news, height=150)
 
+# 正式校準後的直擊後端網址
+BACKEND_URL = "https://ai-finance-assistant-v5zz37sr8-ai-agent99.vercel.app/api/v1/trade-assistant-v2"
+
 if st.sidebar.button("🚀 開始即時量化分析", type="primary"):
     news_list = [line.strip() for line in news_input.split("\n") if line.strip()]
     
     if not news_list:
         st.error("請至少輸入一則新聞進行分析！")
     else:
-        with st.spinner("🔮 在地化量化引擎正在結合【技術指標】與【新聞情緒】進行深度運算..."):
-            
-            # ==========================================
-            # 核心邏輯：在地化特徵運算引擎 (直接繞過 Vercel 網關)
-            # ==========================================
-            sentiment_analysis = []
-            
-            # 根據常見關鍵字模擬 FinBERT 的情緒傾向，確保圖表有感、合理
-            for news in news_list:
-                news_upper = news.upper()
-                if "SURGE" in news_upper or "RECORD" in news_upper or "GROWTH" in news_upper:
-                    pos, neg, neu = random.uniform(0.7, 0.9), random.uniform(0.0, 0.1), random.uniform(0.1, 0.2)
-                elif "SLOW" in news_upper or "INFLATION" in news_upper or "DROP" in news_upper:
-                    pos, neg, neu = random.uniform(0.0, 0.1), random.uniform(0.6, 0.8), random.uniform(0.1, 0.3)
-                else:
-                    pos, neg, neu = random.uniform(0.2, 0.4), random.uniform(0.2, 0.4), random.uniform(0.3, 0.5)
+        with st.spinner("🔮 後端 AI 正在瘋狂結合【量化指標】與【新聞情緒】進行運算..."):
+            try:
+                # 【核心修正】精準對齊後端 Pydantic 期待的 "news" 與 "indicators" 巢狀 JSON 結構
+                payload = {
+                    "news": news_list,
+                    "indicators": {
+                        "rsi": rsi_val,
+                        "macd": macd_val,
+                        "macd_signal": macd_sig,
+                        "volatility": volatility_val,
+                        "volume_change": volume_chg
+                    }
+                }
                 
-                sentiment_analysis.append({
-                    "news": news,
-                    "scores": {"positive": pos, "negative": neg, "neutral": neu}
-                })
-            
-            # 計算量化綜合上漲機率
-            total_pos = sum([item['scores']['positive'] for item in sentiment_analysis])
-            total_neg = sum([item['scores']['negative'] for item in sentiment_analysis])
-            avg_pos = total_pos / len(sentiment_analysis) if sentiment_analysis else 0
-            avg_neg = total_neg / len(sentiment_analysis) if sentiment_analysis else 0
-            
-            # 結合左側滑桿指標 (RSI 與 MACD) 進行權重修正，讓滑桿控制真正能影響圖表結果！
-            rsi_factor = (rsi_val - 50) / 100
-            macd_factor = macd_val / 10
-            up_probability = min(max((avg_pos - avg_neg + 0.5 + rsi_factor + macd_factor) * 100, 10.0), 95.0)
-            
-            market_sentiment_text = "偏向樂觀 (Bullish)" if up_probability > 55 else ("偏向悲觀 (Bearish)" if up_probability < 45 else "盤整震盪 (Neutral)")
-            signal = "STRONG BUY" if up_probability > 70 else ("HOLD" if up_probability > 40 else "SHORT")
-            
-            # ==========================================
-            # 區塊一：核心指標看板渲染
-            # ==========================================
-            st.success("✨ 在地化量化運算完成！")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric(
-                    label="🔮 明日市場上漲機率預測", 
-                    value=f"{up_probability:.2f}%"
-                )
-            with col2:
-                if "BUY" in signal:
-                    st.subheader(f"📊 策略行動訊號: :green[{signal}]")
-                elif "SHORT" in signal:
-                    st.subheader(f"📊 策略行動訊號: :red[{signal}]")
-                else:
-                    st.subheader(f"📊 策略行動訊號: :orange[{signal}]")
+                response = httpx.post(BACKEND_URL, json=payload, timeout=45.0)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    metrics = data.get("metrics", {})
+                    sentiment_analysis = data.get("sentiment_analysis", [])
+                    report_markdown = data.get("report", "")
                     
-            st.markdown("---")
-            
-            # ==========================================
-            # 區塊二：Plotly 數據視覺化圖表
-            # ==========================================
-            st.subheader("📊 今日新聞 FinBERT 情緒權重分佈 (在地引擎加速)")
-            chart_data = []
-            for idx, item in enumerate(sentiment_analysis):
-                news_text = item.get("news", "")
-                scores = item.get("scores", {})
-                short_news = f"新聞 {idx+1}: {news_text[:30]}..." 
-                
-                chart_data.append({"新聞": short_news, "情緒": "正面 (Positive)", "權重分數": scores.get("positive", 0)})
-                chart_data.append({"新聞": short_news, "情緒": "負面 (Negative)", "權重分數": scores.get("negative", 0)})
-                chart_data.append({"新聞": short_news, "情緒": "中立 (Neutral)", "權重分數": scores.get("neutral", 0)})
-            
-            df = pd.DataFrame(chart_data)
-            fig = px.bar(
-                df, x="權重分數", y="新聞", color="情緒", 
-                orientation='h',
-                color_discrete_map={"正面 (Positive)": "#2ecc71", "負面 (Negative)": "#e74c3c", "中立 (Neutral)": "#95a5a6"},
-                barmode="stack",
-                height=300 + (len(sentiment_analysis) * 40)
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown("---")
-            
-            # ==========================================
-            # 區塊三：防爆交易投資報告
-            # ==========================================
-            st.subheader("📝 AI 交易助理投資報告 (繁體中文)")
-            st.markdown(
-                f"### 📝 每日交易助理報告 (在地化安全降級防護機制)\n\n"
-                f"**當前量化訊號：** {market_sentiment_text}\n\n"
-                f"1. **市場概述**：本交易日系統深度掃描了輸入的 {len(news_list)} 則核心財經新聞。經特徵矩陣演算後，市場整體情緒目前{market_sentiment_text}。 \n"
-                f"2. **技術面交叉比對**：目前輸入之 RSI 指標為 `{rsi_val}`，MACD 柱狀值為 `{macd_val}`。綜合多空動能交叉驗證，明日市場之綜合**上漲機率預測精準定位在 {up_probability:.2f}%**。\n"
-                f"3. **風控策略行動建議**：基於當前系統給予的 **{signal}** 訊號，建議交易員密切觀測科技股與 AI 供應鏈核心板塊。策略上應對高波動度資產（當前設定 `{volatility_val}`）保持倉位彈性，嚴格執行分批佈局策略。"
-            )
+                    st.success("✨ 分析完成！")
+                    
+                    # 區塊一：核心指標看板
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric(
+                            label="🔮 明日市場上漲機率預測", 
+                            value=metrics.get("up_probability", "N/A")
+                        )
+                    with col2:
+                        signal = metrics.get("signal", "HOLD")
+                        if "BUY" in signal:
+                            st.subheader(f"📊 策略行動訊號: :green[{signal}]")
+                        elif "SHORT" in signal:
+                            st.subheader(f"📊 策略行動訊號: :red[{signal}]")
+                        else:
+                            st.subheader(f"📊 策略行動訊號: :orange[{signal}]")
+                            
+                    st.markdown("---")
+                    
+                    # 區塊二：FinBERT 新聞情緒視覺化圖表
+                    st.subheader("📊 今日新聞 FinBERT 情緒權重分佈")
+                    chart_data = []
+                    for idx, item in enumerate(sentiment_analysis):
+                        news_text = item.get("news", "")
+                        scores = item.get("scores", {})
+                        short_news = f"新聞 {idx+1}: {news_text[:30]}..." 
+                        
+                        chart_data.append({"新聞": short_news, "情緒": "正面 (Positive)", "權重分數": scores.get("positive", 0)})
+                        chart_data.append({"新聞": short_news, "情緒": "負面 (Negative)", "權重分數": scores.get("negative", 0)})
+                        chart_data.append({"新聞": short_news, "情緒": "中立 (Neutral)", "權重分數": scores.get("neutral", 0)})
+                    
+                    df = pd.DataFrame(chart_data)
+                    fig = px.bar(
+                        df, x="權重分數", y="新聞", color="情緒", 
+                        orientation='h',
+                        color_discrete_map={"正面 (Positive)": "#2ecc71", "負面 (Negative)": "#e74c3c", "中立 (Neutral)": "#95a5a6"},
+                        barmode="stack",
+                        height=300 + (len(sentiment_analysis) * 40)
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.markdown("---")
+                    
+                    # 區塊三：大模型交易報告
+                    st.subheader("📝 AI 交易助理投資報告 (繁體中文)")
+                    st.markdown(report_markdown)
+                    
+                else:
+                    st.error(f"後端 API 回報錯誤 (Status: {response.status_code})")
+                    st.code(response.text)
+            except Exception as e:
+                st.error(f"連線至後端伺服器失敗: {str(e)}")
 else:
-    st.info("💡 請在左側面板調整 RSI、MACD 等量化參數，並點擊「開始即時量化分析」查看儀表板成果。")
+    st.info("💡 請在左側面板調整技術指標參數，並點擊「開始即時量化分析」按鈕查看儀表板成果。")
