@@ -5,11 +5,11 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
-# 強制限制全域最大連線，徹底防止任何 Errno 16 網路 busy
+# 嚴格限制連線池，防止 Errno 16 網路 busy
 limits = httpx.Limits(max_keepalive_connections=1, max_connections=1)
 
 async def analyze_sentiment(news_list: list, hf_token: str) -> list:
-    """呼叫 Hugging Face FinBERT API 進行情緒分析 (安全版)"""
+    """呼叫 Hugging Face FinBERT API (安全版)"""
     HF_URL = "https://api-inference.huggingface.co/models/ProsusAI/finbert"
     headers = {"Authorization": f"Bearer {hf_token}"}
     results = []
@@ -29,14 +29,14 @@ async def analyze_sentiment(news_list: list, hf_token: str) -> list:
             except Exception as e:
                 logger.error(f"FinBERT local connection error skipped: {str(e)}")
                 results.append({"news": news, "scores": {"positive": 0.33, "negative": 0.33, "neutral": 0.34}})
-            await asyncio.sleep(0.2) # 拉長喘息時間至 0.2 秒
+            await asyncio.sleep(0.2)
             
     return results
 
 async def generate_report(market_trend_pred: str, sentiment_summary: str, raw_news_list: list, risk_level: float, api_key: str) -> str:
-    """透過 Google Gemini 1.5 Flash 正式版 v1 API 生成繁體中文報告"""
-    # 修正重點：將 v1beta 改為官方最穩定的 v1 正式版路徑
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+    """透過 Google Gemini 1.5 Flash 官方標準 v1beta 網址生成繁體中文報告"""
+    # 修正重點：嚴格遵循官方 v1beta/models/gemini-1.5-flash 路由規格
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     retrieved_context = "\n".join([f"- {news}" for news in raw_news_list[:3]])
     prompt_content = f"市場上漲機率: {market_trend_pred}\n情緒: {sentiment_summary}\n新聞: {retrieved_context}\n請用繁體中文生成一份包含市場概述、基於風險度 {risk_level} 的交易建議與風險提示的簡短報告。"
