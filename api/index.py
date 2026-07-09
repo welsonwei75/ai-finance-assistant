@@ -25,8 +25,7 @@ network_sem = asyncio.Semaphore(1)
 async def root():
     return {"status": "ok", "message": "V2 Active. Go to /docs"}
 
-# 【開闢全新 V2 路由】強制繞過 Vercel 頑固的舊編譯快取！
-@app.post("/api/v1/trade-assistant-v2")
+@app.post("/v2")
 async def trade_assistant_endpoint_v2(payload: TradePayload):
     hf_token = os.getenv("HF_TOKEN")
     llm_key = os.getenv("LLM_API_KEY")
