@@ -14,7 +14,7 @@ st.markdown("本系統整合 **FinBERT 財經情緒模型** 與 **LLM 大模型*
 st.sidebar.header("⚙️ 交易策略設定")
 
 # ==========================================
-# 左側控制面板：技術指標滑桿 (完美對齊後端規格)
+# 左側控制面板：技術指標滑桿 (精準對齊 V2 後端規格)
 # ==========================================
 st.sidebar.markdown("### 📊 技術指標 (Technical Indicators)")
 rsi_val = st.sidebar.slider("RSI (相對強弱指標)", 0.0, 100.0, 50.0, step=1.0)
@@ -32,8 +32,8 @@ default_news = (
 )
 news_input = st.sidebar.text_area("市場即時新聞", value=default_news, height=150)
 
-# 正式校準後的直擊後端網址
-BACKEND_URL = "https://ai-finance-assistant-v5zz37sr8-ai-agent99.vercel.app/api/v1/trade-assistant-v2"
+# 正式校準後的 V2 直擊後端網址 (已拿掉多餘的 /api 層級，直攻 V2 通道)
+BACKEND_URL = "https://ai-finance-assistant-v5zz37sr8-ai-agent99.vercel.app/v1/trade-assistant-v2"
 
 if st.sidebar.button("🚀 開始即時量化分析", type="primary"):
     news_list = [line.strip() for line in news_input.split("\n") if line.strip()]
@@ -43,7 +43,7 @@ if st.sidebar.button("🚀 開始即時量化分析", type="primary"):
     else:
         with st.spinner("🔮 後端 AI 正在瘋狂結合【量化指標】與【新聞情緒】進行運算..."):
             try:
-                # 【核心修正】精準對齊後端 Pydantic 期待的 "news" 與 "indicators" 巢狀 JSON 結構
+                # 【核心修正】精準發送 "news" 與 "indicators" 巢狀結構，徹底消滅 422 錯誤
                 payload = {
                     "news": news_list,
                     "indicators": {
